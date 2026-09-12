@@ -1,0 +1,31 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# YOLO pretrained weights auto-downloaded by ultralytics on first run
+/*.pt
+
+# Ultralytics training run artifacts (weights, plots, logs) — regenerate via scripts/train_ppe_model.py
+runs/
+
+# local Claude Code project config
+.claude/
+
+# datasets — fetched manually, see data/README.md
+data/raw/
+data/yolo/
+!data/README.md
+
+# trained weights — produced by scripts/train_ppe_model.py, see models/README.md
+models/*.pt
+!models/README.md
+
+# runtime outputs (annotated media, evidence, reports, logs)
+outputs/*
+!outputs/.gitkeep
+
+.DS_Store
+Thumbs.db
