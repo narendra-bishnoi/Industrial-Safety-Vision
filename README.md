@@ -1,10 +1,10 @@
 # Industrial Safety Vision System
 
 A command-line Computer Vision pipeline that analyzes images or video from
-an industrial/construction environment, detects people, evaluates helmet
-PPE compliance through spatial reasoning (not a blind classifier flag),
-tracks people across video frames, and produces evidence-backed
-machine-readable and human-readable safety reports.
+an industrial/construction environment, detects people, checks helmet PPE
+compliance by looking at where the detections actually are instead of just
+counting classes, tracks people across video frames, and produces
+evidence-backed machine-readable and human-readable safety reports.
 
 Academic submission (VITyarthi). See `statement.md` for the concise problem
 statement/scope, and `docs/` for architecture, workflow, and evaluation
@@ -20,7 +20,7 @@ Given an image or video, the system:
    us on a public dataset).
 4. **Associates** each detected person with nearby PPE detections in their
    head region (spatial reasoning, not a global count).
-5. Applies a rule engine to classify compliant vs. violation, distinguishing
+5. Runs a rule engine to classify compliant vs. violation, distinguishing
    a high-confidence violation (bare head positively detected) from a
    weaker, unverified one (nothing detected in the head region at all).
 6. Tracks people across video frames with a lightweight IoU tracker so the
@@ -36,13 +36,13 @@ See `statement.md`.
 
 ## Objectives
 
-- Demonstrate a defensible, explainable CV pipeline (not "if class not
-  found: violation").
-- Use an appropriately small, reproducible model given laptop-class
-  hardware (RTX 2050, 4GB VRAM, or CPU-only).
-- Keep detection, inference/association, and rule-based decision explicitly
+- Build an explainable CV pipeline rather than a simple "if class not
+  found: violation" check.
+- Use a small, reproducible model that fits laptop-class hardware
+  (RTX 2050, 4GB VRAM, or CPU-only).
+- Keep detection, inference/association, and rule-based decision logic
   separate, testable, and documented.
-- Report only measured results — no fabricated accuracy numbers.
+- Report only measured results — no made-up accuracy numbers.
 
 ## Functional Requirements
 
@@ -66,15 +66,15 @@ See `statement.md`.
 ## Non-Functional Requirements
 
 - **Performance** — inference time and FPS are measured and reported on
-  every run (see `docs/evaluation.md` for real, measured numbers).
+  every run (see `docs/evaluation.md` for the real, measured numbers).
 - **Reliability** — invalid/missing/corrupt inputs, bad config values, and
   missing model weights all raise clear, typed exceptions instead of
   crashing or silently producing wrong output (`src/config.py`,
   `src/preprocessing/processor.py`, `src/detection/detector.py`).
 - **Usability** — a documented CLI with `--help`, sensible defaults, and a
-  readable terminal summary; no GUI required for the core workflow.
+  readable terminal summary; no GUI needed for the core workflow.
 - **Maintainability** — modular package structure, config separated from
-  logic, type hints, no module depends on `ultralytics` except
+  logic, type hints, and no module depends on `ultralytics` except
   `src/detection/detector.py` (see `docs/architecture.md`).
 - **Error Handling & Logging** — every module raises typed exceptions at
   its boundary; `src/utils/logger.py` provides structured console + rotating
@@ -158,7 +158,7 @@ project-root/
 - pip
 - ~2GB free disk for dependencies (PyTorch is the largest)
 - Optional: NVIDIA GPU + CUDA for faster inference (`--device cuda`); CPU
-  works for images and short video clips
+  works fine for images and short video clips
 
 ## Environment Setup
 
@@ -176,10 +176,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`requirements.txt` is intentionally short — `ultralytics` pulls in `torch`/
-`torchvision` as transitive dependencies, and no library is listed that
-isn't actually used in the pipeline (no `pandas`/`matplotlib`, since the
-project doesn't need a dataframe or a plot to function).
+`requirements.txt` is kept short on purpose — `ultralytics` already pulls in
+`torch`/`torchvision` as transitive dependencies, and there's nothing in
+there that isn't actually used by the pipeline (no `pandas`/`matplotlib`,
+since nothing here needs a dataframe or a plot to run).
 
 ## Dataset Setup
 
@@ -193,7 +193,7 @@ python -m scripts.prepare_dataset --source data/raw --dest data/yolo --val-split
 ## Model Setup
 
 See `models/README.md`. The person detector auto-downloads on first run.
-The PPE detector must be fine-tuned once:
+The PPE detector needs to be fine-tuned once:
 
 ```bash
 python -m scripts.train_ppe_model --data data/yolo/data.yaml --epochs 8 --imgsz 416 --batch 8 --device cpu
@@ -264,20 +264,20 @@ pytest -v
 Tests cover: invalid input handling (`test_preprocessing.py`,
 `test_validation.py`), safety rule/zone logic (`test_rules.py`), tracker ID
 persistence (`test_tracker.py`), and report generation
-(`test_reporting.py`). None of these require the trained PPE weights or a
+(`test_reporting.py`). None of these need the trained PPE weights or a
 GPU — model inference is isolated behind `PersonDetector`/`PPEDetector` and
 tested indirectly via synthetic detections. All 29 tests pass.
 
 **End-to-end verification performed** (real CLI runs, not just unit tests):
-image-mode run on a real sample image producing correct person detection,
-`NO_HELMET` violations, evidence images, and `report.json`; a second run
-with `--zones` confirming `RESTRICTED_ZONE_ENTRY` fires correctly alongside
-PPE violations. **Video mode was not end-to-end tested** — no sample video
-file was available for this submission (video *support* exists in the code
-and shares the same tested rule/tracker/reporting logic, but hasn't itself
-been run). The `NO_HELMET_UNVERIFIED` branch was not exercised in a live
-run either — it's covered by a deterministic unit test instead (see
-`docs/evaluation.md` for details on both).
+an image-mode run on a real sample image producing correct person
+detection, `NO_HELMET` violations, evidence images, and `report.json`; a
+second run with `--zones` confirming `RESTRICTED_ZONE_ENTRY` fires
+correctly alongside PPE violations. **Video mode was not end-to-end
+tested** — no sample video file was available for this submission (video
+*support* exists in the code and shares the same tested rule/tracker/
+reporting logic, but hasn't itself been run). The `NO_HELMET_UNVERIFIED`
+branch also wasn't exercised in a live run — it's covered instead by a
+deterministic unit test (see `docs/evaluation.md` for details on both).
 
 ## Evaluation Methodology
 
@@ -289,39 +289,39 @@ deterministic unit tests, not accuracy metrics.
 
 ## Limitations
 
-- **PPE model trained for 3 epochs, not the configured 8** — the training
-  process on this machine was terminated by an OS/harness memory guard
-  after 3 epochs completed (limited free RAM on this laptop for CPU-only
-  training, not a code defect). Metrics were still trending upward at
-  interruption (mAP50: 0.561 → 0.583 → 0.596 across the 3 completed
-  epochs), so more training would likely help further — see
-  `docs/evaluation.md` for the full, real numbers and per-class breakdown.
+- **PPE model trained for 3 epochs, not the configured 8** — training on
+  this machine got cut off by an OS/harness memory guard after 3 epochs
+  (limited free RAM on this laptop for CPU-only training, not a code
+  defect). Metrics were still trending upward at that point (mAP50: 0.561
+  → 0.583 → 0.596 across the 3 completed epochs), so more training would
+  likely help further — see `docs/evaluation.md` for the full numbers and
+  per-class breakdown.
 - Helmet compliance only (no vest/other PPE in this submission).
 - PPE detector accuracy is bounded by a 5000-image dataset — expect misses
   on unusual angles, lighting, or helmet colors not well represented in it.
   The dataset's own `person` class is too sparse to be usable (mAP50 0.022
-  in our evaluation) — this project deliberately does not rely on it.
-- Greedy IoU tracker can lose/swap IDs under heavy occlusion or fast motion.
+  in our evaluation), so this project deliberately doesn't rely on it.
+- The greedy IoU tracker can lose or swap IDs under heavy occlusion or fast motion.
 - Restricted zones are 2D image-space polygons, not real-world calibrated coordinates.
-- `NO_HELMET_UNVERIFIED` events reflect *absence of detection*, not a
-  confirmed violation — always human-reviewable via the evidence image.
+- `NO_HELMET_UNVERIFIED` events mean *nothing was detected*, not a
+  confirmed violation — always worth a human check via the evidence image.
   This branch was verified with a deterministic unit test, not a live run.
-- Video mode was not end-to-end tested for this submission (no sample video
-  file was available) — see Testing above.
+- Video mode wasn't end-to-end tested for this submission since no sample
+  video file was available — see Testing above.
 
 ## Ethical / Privacy Considerations
 
-This system processes footage of real or simulated people. It is designed
-as a **review aid for human safety personnel**, not an autonomous
-enforcement or disciplinary tool — every flagged event includes an evidence
-image specifically so it can be human-verified before any action is taken.
-It performs no facial recognition, identity inference, or biometric
-matching of any kind — only anonymous bounding boxes and a per-run track
-ID that resets every run. Footage of real individuals should only be used
-with appropriate consent/authorization from the site and recorded persons;
-this repository ships no personal data. False positives and false
-negatives are expected (see Limitations) and are a core reason this stays
-assistive rather than automated.
+This system processes footage of real or simulated people. It's meant as
+a **review aid for human safety personnel**, not an autonomous enforcement
+or disciplinary tool — every flagged event includes an evidence image
+specifically so it can be checked by a human before any action is taken.
+It does no facial recognition, identity inference, or biometric matching of
+any kind — just anonymous bounding boxes and a per-run track ID that resets
+every run. Footage of real individuals should only be used with appropriate
+consent/authorization from the site and recorded persons; this repository
+ships no personal data. False positives and false negatives are expected
+(see Limitations), which is a core reason this stays assistive rather than
+automated.
 
 ## References
 
